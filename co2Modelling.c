@@ -94,21 +94,6 @@ DEFINE_EXECUTE_ON_LOADING(Initialize, libname)
 	printf("NSample=%d\n",NSample);
 	fflush (stdout);
 }
-
-
-// DEFINE_PROFILE(species_profile, t, i)
-// {
-// cell_t c;
-
-// begin_c_loop(c, t)
-// {
-// 		{
-// 			C_PROFILE(c,t,i) = 0.2;
-// 		}
-// }
-// end_c_loop(c, t)
-// }
-
  
 
 DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
@@ -116,16 +101,17 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 	Domain * domain = Get_Domain (3);  /* 1 is for single phase */
 	Thread * thread = Lookup_Thread (domain, interiorID); 
 	cell_t c;
+	count=0;
 // #if RP_NODE
 	double hCO3,h20,CO2,CO3m2,totalCarbon;
 
   // printf ("resetSpeciesFraction si running\n");
   // fflush (stdout);
 
-
 	begin_c_loop(c, thread) 
 		{	
 			int i=0;
+			double cVOF=C_VOF(c,thread);
 			/* Those are mole concentration=massFraction/molecularMass*1000 */
 				 hCO3=C_YI(c, thread, 0)/63*1000;
 				 h20=C_YI(c, thread, 1)/18*1000;
@@ -136,12 +122,22 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 				 hCO3=totalCarbon*getHCO3FractionByPH(PH);
 				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
 				 CO2=totalCarbon-hCO3-CO3m2;
-				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44))/18.0;
-		    /*convert to mass fraction=moleFraction/1000*molecularMass*/
-				C_YI(c, thread, 0)=hCO3/1000*63;
-				C_YI(c, thread, 1)=h20/1000*18;
-				C_YI(c, thread, 2)=CO2/1000*44;
-				C_YI(c, thread, 3)=CO3m2/1000*62;
+				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44))/18.0;	    
+ 			// if (cVOF>0.05)
+				{
+					/*convert to mass fraction=moleFraction/1000*molecularMass*/
+					C_YI(c, thread, 0)=hCO3/1000*63;
+					C_YI(c, thread, 1)=h20/1000*18;
+					C_YI(c, thread, 2)=CO2/1000*44;
+					C_YI(c, thread, 3)=CO3m2/1000*62;
+				}
+			// else 
+			// 	{
+			// 		C_YI(c, thread, 0)=0.0;
+			// 		C_YI(c, thread, 1)=0.0;
+			// 		C_YI(c, thread, 2)=0.0;
+			// 		C_YI(c, thread, 3)=0.0;
+			// 	}	
  
 			// if (c<=100)
 			// {
@@ -177,6 +173,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 	// Thread **pt = THREAD_SUB_THREADS(thread);
 	// Thread *tp = pt[0]; // primary	
 	// Thread *ts = pt[1]; // secondary
+	count=0;
  
 	begin_c_loop(c, thread) 
 		{	
@@ -193,12 +190,22 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
 				 CO2=totalCarbon-hCO3-CO3m2;
 				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44))/18.0;
-		    /*convert to mass fraction=moleFraction/1000*molecularMass*/
-				C_YI(c, thread, 0)=hCO3/1000*63;
-				C_YI(c, thread, 1)=h20/1000*18;
-				C_YI(c, thread, 2)=CO2/1000*44;
-				C_YI(c, thread, 3)=CO3m2/1000*62;
- 
+				 if (cVOF>0.1)
+					{
+						/*convert to mass fraction=moleFraction/1000*molecularMass*/
+						C_YI(c, thread, 0)=hCO3/1000*63;
+						C_YI(c, thread, 1)=h20/1000*18;
+						C_YI(c, thread, 2)=CO2/1000*44;
+						C_YI(c, thread, 3)=CO3m2/1000*62;
+					}
+				else 
+					{
+						C_YI(c, thread, 0)=0.0;
+						C_YI(c, thread, 1)=0.0;
+						C_YI(c, thread, 2)=0.0;
+						C_YI(c, thread, 3)=0.0;
+					}	
+
 			if (c<=100)
 			{
 				// printf("hCO3 is %f for cell %d in node %d \n",hCO3,c,myid);
@@ -214,155 +221,23 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 	end_c_loop (c, thread);
 }
 
-DEFINE_ON_DEMAND(testFindCell)
+
+DEFINE_ON_DEMAND(resetCount)
 {
-
-  printf ("testFindCell si running\n");
-  fflush (stdout);
-
-	CX_Cell_Id *cx_cell;
-	cell_t c;
-	Thread *t;
-	real P[3];
- 
-	real P_Cell[3];
-
-	P[0]=0.1;
-	P[1]=0.1;
-	P[2]=0.1;
-
-
-	P_Cell[0]=0.1;
-	P_Cell[1]=0.1;
-	P_Cell[2]=0.1;
-
-
-	printf("Exeed >>>>>>>> in node %d \n",myid);
-	domain_table = CX_Start_ND_Point_Search( domain_table,TRUE,-1);
-	float dist=0.1;
-	cx_cell =CX_Find_Closest_Cell_To_Point(domain_table, P, &dist, 111111);
-	printf("cx_cell is %p in node %d \n",cx_cell,myid);
-
-
-	if (cx_cell) 
-		{
-			c = RP_CELL(cx_cell);
-			t = RP_THREAD(cx_cell);
-			C_CENTROID(P_Cell,c,t);
-			printf("Found cell at [%g,%g,%g] with centroid [%g,%g,%g]. dist=%f, in node %d \n",P[0],P[1],P[2],P_Cell[0],P_Cell[1],P_Cell[2],dist,myid);
-		} 
-	else 
-		{
-			printf("Could not find cell at [%g,%g,%g]! in node %d \n",P[0],P[1],P[2],myid);
-		}
-
-	domain_table = CX_End_ND_Point_Search(domain_table);
-
-
+	count=0;
+	printf("count is reset as %d \n",count);
 	fflush (stdout);
- 
-}
+
+ }
 
 
-DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index,from_species_index, to_index, to_species_index, d_mdot_d_vof_from,d_mdot_d_vof_to)
-{
-   real m_lg;
-   // real T_SAT = 373.15;
-   Thread *liq = THREAD_SUB_THREAD(thread, from_index);
-   Thread *gas = THREAD_SUB_THREAD(thread, to_index);
-  
-  // printf ("co2Loss is running\n");
-  // fflush (stdout);
 
-  double cVOF,massTransferRate;
-  double verticalDistance=0.02;
-  double xp,yp,zp;
-  double CO2;
-   m_lg = 0.;
-  massTransferRate=0.0;
-#if RP_NODE
-   cVOF=C_VOF(cell,liq);
-   if (cVOF>=0.1 && cVOF<=0.9)
-   {
-	real x[ND_ND];
-	C_CENTROID(x,cell,thread); 
- 	xp=x[0];
- 	yp=x[1];
- 	zp=x[2]-verticalDistance;
-
-	// printf("counttt=%d \n",counttt);
-	// counttt++;
-
-	real P[3];
-	real P_Cell[3];
-	P[0]=xp;
-	P[1]=yp;
-	P[2]=zp;
-
-	cell_t c;
-	Thread *t;
-	CX_Cell_Id *cx_cell;
- 
-	domain_table = CX_Start_ND_Point_Search( domain_table,TRUE,-1);
-	float dist=0.1;
-	cx_cell =CX_Find_Closest_Cell_To_Point(domain_table, P, &dist, 0.1);
-	// printf("cx_cell is %p in node %d \n",cx_cell,myid);
-
-
-	if (cx_cell) 
-		{
-			Domain * domain = Get_Domain (3);  /* 1 is for single phase */
-			Thread * threadMix = Lookup_Thread (domain, interiorID); 
-
-
-			c = RP_CELL(cx_cell);
-			t = RP_THREAD(cx_cell);
-			C_CENTROID(P_Cell,c,t);
-
-				// if (count<=20)
-				// 	{
-						// printf("target location is %f,%f,%f \n",x[0],x[1],x[2]);
-						// printf("c is %d and t is %p \n",c,t);
-						// printf("the location by finding t is %f, %f, %f; myid=%d \n", P_Cell[0],P_Cell[1],P_Cell[2],myid);
-						// printf("Found cell at [%g,%g,%g] with centroid [%g,%g,%g]. dist=%f, in node %d \n",P[0],P[1],P[2],P_Cell[0],P_Cell[1],P_Cell[2],dist,myid);
-			            CO2=fabs(C_YI_G(c, threadMix,2)[2])/44*1000;
-						count++;
-						massTransferRate=CO2*0.01;
-
-			            // C_YI_G(c,t)[i]
-
-
-			            // C_CENTROID(P_Cell,c,threadMix);
-						// printf("Co2 is %f at cell %d threadMix=%p and count is %d\n",CO2,c,threadMix,count);
-						// printf("the location by threadMix is %f, %f, %f \n", P_Cell[0],P_Cell[1],P_Cell[2]);
-						// printf("--------------------------------\n");
-
-					// }
-		} 
-	// else 
-
-	// 	{
-	// 		printf("Could not find cell at [%g,%g,%g]! in node %d \n",P[0],P[1],P[2],myid);
-	// 	}
-	domain_table = CX_End_ND_Point_Search(domain_table);
-
- //   	massTransferRate=10.8;
-   }
-#endif
-
-// if (myid==1)
-// {
-//       printf("this is cell %d cvof=%f from ID %d \n",cID,cVOF,myid);
-// }
-   
-   return (massTransferRate);
-}
  
 DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species_index, to_index, to_species_index, d_mdot_d_vof_from,d_mdot_d_vof_to)
 {
-   real m_lg;
-   // real T_SAT = 373.15;
-   Thread *liq = THREAD_SUB_THREAD(thread, from_index);
+	real m_lg;
+	// real T_SAT = 373.15;
+	Thread *liq = THREAD_SUB_THREAD(thread, from_index);
 	Thread *gas = THREAD_SUB_THREAD(thread, to_index);
 
 	// printf ("co2Loss is running\n");
@@ -373,18 +248,31 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species
 	double verticalDistance=0.02;
 	double xp,yp,zp;
 	double CO2Gradient;
-	m_lg = 0.;
+	real P[3];
+ 
     massTransferRate=0.0;
-#if RP_NODE
+
    cVOF=C_VOF(cell,liq);
-   if (cVOF>=0.1 && cVOF<=0.9)
+ //   	printf ("cVOF is %f\n",cVOF);
+	// fflush (stdout);
+   if (cVOF>=0.001 && cVOF<=0.7)
    {
-		CO2Gradient=fabs(C_YI_G(cell, threadMix,2)[2])/44*1000;
-		massTransferRate=CO2*0.01;
+		CO2Gradient=C_YI(cell, threadMix,2)/44*1000;
+
+		// if (count<=100)
+		// {
+			// C_CENTROID(P,cell,threadMix);
+			// printf("CO2Gradient is %f for cell %d ; Pz=%f, in node %d  ",CO2Gradient,cell,P[2],myid);
+			// count++;
+		// }
+
+		massTransferRate=CO2Gradient*10;
+		// printf("massTransferRate is %f \n",massTransferRate);
+		fflush (stdout);
 	} 
-#endif
  
    return (massTransferRate);
+	// return (0.0);
 }
 
 
@@ -416,14 +304,12 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 		 		lightDepth=0.;
 
 		 	double I=1./exp(250*(lightDepth))*500;
-			// if (c<=100)
-			// {
-			// 	printf("z:%f for cell %d in node %d; I=%f \n",x[2],c,myid,I);
-			// }
+ 
 		 	double reactionRate=linearIntepolation(I);
 
 			// if (c<=100)
 			// {
+		 // 		printf("z:%f for cell %d in node %d; I=%f \n",x[2],c,myid,I);
 			// 	printf("z:%f for cell %d in node %d; I=%f; reactionRate=%f \n",x[2],c,myid,I,reactionRate);
 			// }
 
@@ -447,12 +333,7 @@ DEFINE_LINEARIZED_MASS_TRANSFER(evaporation, cell, thread, from_index,from_speci
   double cVOF,massTransferRate;
    // printf("this is cell  111111111111111111111111111\n");
    m_lg = 0.;
-
-  // printf ("evaporation is running\n");
-  // fflush (stdout);
-
-	// printf("this is cell %d cvof=%f from ID %d \n",cID,cVOF,myid);
-
+ 
    massTransferRate=0.0;
 #if RP_NODE
    cID=cell;
@@ -462,15 +343,151 @@ DEFINE_LINEARIZED_MASS_TRANSFER(evaporation, cell, thread, from_index,from_speci
       		// printf("this is cell %d cvof=%f from ID %d \n",cID,cVOF,myid);
    	massTransferRate=0;
    }
-#endif
-
-// if (myid==1)
-// {
-//       printf("this is cell %d cvof=%f from ID %d \n",cID,cVOF,myid);
-// }
-   
+#endif   
 	fflush (stdout);
    return (massTransferRate);
 }
 
 
+// DEFINE_ON_DEMAND(testFindCell)
+// {
+
+//   printf ("testFindCell si running\n");
+//   fflush (stdout);
+
+// 	CX_Cell_Id *cx_cell;
+// 	cell_t c;
+// 	Thread *t;
+// 	real P[3];
+ 
+// 	real P_Cell[3];
+
+// 	P[0]=0.1;
+// 	P[1]=0.1;
+// 	P[2]=0.1;
+
+
+// 	P_Cell[0]=0.1;
+// 	P_Cell[1]=0.1;
+// 	P_Cell[2]=0.1;
+
+
+// 	printf("Exeed >>>>>>>> in node %d \n",myid);
+// 	domain_table = CX_Start_ND_Point_Search( domain_table,TRUE,-1);
+// 	float dist=0.1;
+// 	cx_cell =CX_Find_Closest_Cell_To_Point(domain_table, P, &dist, 111111);
+// 	printf("cx_cell is %p in node %d \n",cx_cell,myid);
+
+
+// 	if (cx_cell) 
+// 		{
+// 			c = RP_CELL(cx_cell);
+// 			t = RP_THREAD(cx_cell);
+// 			C_CENTROID(P_Cell,c,t);
+// 			printf("Found cell at [%g,%g,%g] with centroid [%g,%g,%g]. dist=%f, in node %d \n",P[0],P[1],P[2],P_Cell[0],P_Cell[1],P_Cell[2],dist,myid);
+// 		} 
+// 	else 
+// 		{
+// 			printf("Could not find cell at [%g,%g,%g]! in node %d \n",P[0],P[1],P[2],myid);
+// 		}
+
+// 	domain_table = CX_End_ND_Point_Search(domain_table);
+
+
+// 	fflush (stdout);
+ 
+// }
+
+// DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index,from_species_index, to_index, to_species_index, d_mdot_d_vof_from,d_mdot_d_vof_to)
+// {
+//    real m_lg;
+//    // real T_SAT = 373.15;
+//    Thread *liq = THREAD_SUB_THREAD(thread, from_index);
+//    Thread *gas = THREAD_SUB_THREAD(thread, to_index);
+  
+//   // printf ("co2Loss is running\n");
+//   // fflush (stdout);
+
+//   double cVOF,massTransferRate;
+//   double verticalDistance=0.02;
+//   double xp,yp,zp;
+//   double CO2Gradient;
+//    m_lg = 0.;
+//   massTransferRate=0.0;
+// #if RP_NODE
+//    cVOF=C_VOF(cell,liq);
+//    if (cVOF>=0.1 && cVOF<=0.9)
+//    {
+// 	real x[ND_ND];
+// 	C_CENTROID(x,cell,thread); 
+//  	xp=x[0];
+//  	yp=x[1];
+//  	zp=x[2]-verticalDistance;
+
+// 	// printf("counttt=%d \n",counttt);
+// 	// counttt++;
+
+// 	real P[3];
+// 	real P_Cell[3];
+// 	P[0]=xp;
+// 	P[1]=yp;
+// 	P[2]=zp;
+
+// 	cell_t c;
+// 	Thread *t;
+// 	CX_Cell_Id *cx_cell;
+ 
+// 	domain_table = CX_Start_ND_Point_Search( domain_table,TRUE,-1);
+// 	float dist=0.1;
+// 	cx_cell =CX_Find_Closest_Cell_To_Point(domain_table, P, &dist, 0.1);
+// 	// printf("cx_cell is %p in node %d \n",cx_cell,myid);
+
+
+// 	if (cx_cell) 
+// 		{
+// 			Domain * domain = Get_Domain (3);  /* 1 is for single phase */
+// 			Thread * threadMix = Lookup_Thread (domain, interiorID); 
+
+
+// 			c = RP_CELL(cx_cell);
+// 			t = RP_THREAD(cx_cell);
+// 			C_CENTROID(P_Cell,c,t);
+
+// 				// if (count<=20)
+// 				// 	{
+// 						// printf("target location is %f,%f,%f \n",x[0],x[1],x[2]);
+// 						// printf("c is %d and t is %p \n",c,t);
+// 						// printf("the location by finding t is %f, %f, %f; myid=%d \n", P_Cell[0],P_Cell[1],P_Cell[2],myid);
+// 						// printf("Found cell at [%g,%g,%g] with centroid [%g,%g,%g]. dist=%f, in node %d \n",P[0],P[1],P[2],P_Cell[0],P_Cell[1],P_Cell[2],dist,myid);
+// 			            CO2Gradient=fabs(C_YI_G(c, threadMix,2)[2])/44*1000;
+// 						count++;
+// 						massTransferRate=CO2Gradient*0.01;
+
+// 			            // C_YI_G(c,t)[i]
+
+
+// 			            // C_CENTROID(P_Cell,c,threadMix);
+// 						// printf("Co2 is %f at cell %d threadMix=%p and count is %d\n",CO2,c,threadMix,count);
+// 						// printf("the location by threadMix is %f, %f, %f \n", P_Cell[0],P_Cell[1],P_Cell[2]);
+// 						// printf("--------------------------------\n");
+
+// 					// }
+// 		} 
+// 	// else 
+
+// 	// 	{
+// 	// 		printf("Could not find cell at [%g,%g,%g]! in node %d \n",P[0],P[1],P[2],myid);
+// 	// 	}
+// 	domain_table = CX_End_ND_Point_Search(domain_table);
+
+//  //   	massTransferRate=10.8;
+//    }
+// #endif
+
+// // if (myid==1)
+// // {
+// //       printf("this is cell %d cvof=%f from ID %d \n",cID,cVOF,myid);
+// // }
+   
+//    return (massTransferRate);
+// }
