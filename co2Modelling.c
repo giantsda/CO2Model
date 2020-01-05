@@ -3,9 +3,7 @@
 #include "cxndsearch.h"
 #include "surf.h"
 
-
-#define K1 2.0e-2
-#define K2 5.
+ 
 
 double PH=8.0;
 double* totalCarbon;
@@ -92,6 +90,9 @@ DEFINE_EXECUTE_ON_LOADING(Initialize, libname)
     }
   // srand (time (0) + myid * 123);  /* set seed for random number */
 	printf("NSample=%d\n",NSample);
+	double a=1e-10;
+	double b=-log10(a);
+	printf("b=%f\n",b);
 	fflush (stdout);
 }
  
@@ -103,7 +104,7 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 	cell_t c;
 	count=0;
 // #if RP_NODE
-	double hCO3,h20,CO2,CO3m2,totalCarbon;
+	double hCO3,h20,CO2,CO3m2,H,totalCarbon;
 
   // printf ("resetSpeciesFraction si running\n");
   // fflush (stdout);
@@ -113,31 +114,34 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 			int i=0;
 			double cVOF=C_VOF(c,thread);
 			/* Those are mole concentration=massFraction/molecularMass*1000 */
-				 hCO3=C_YI(c, thread, 0)/63*1000;
-				 h20=C_YI(c, thread, 1)/18*1000;
-				 CO2=C_YI(c, thread, 2)/44*1000;
-				 CO3m2=C_YI(c, thread, 3)/62*1000;
+				 H=C_YI(c, thread, 0)/1*1000;
+				 hCO3=C_YI(c, thread, 1)/63*1000;
+				 CO3m2=C_YI(c, thread, 2)/62*1000;	
+				 CO2=C_YI(c, thread, 3)/44*1000;			
+				 h20=C_YI(c, thread, 4)/18*1000;
 				 totalCarbon=hCO3+CO2+CO3m2;
 			/* equilibrium mole fraction*/	 
+				 PH=-log10(H); /*convert mole concentration of proton to PH */
 				 hCO3=totalCarbon*getHCO3FractionByPH(PH);
 				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
 				 CO2=totalCarbon-hCO3-CO3m2;
-				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44))/18.0;	    
- 			// if (cVOF>0.05)
+				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	    
+ 			if (cVOF>0.05)
 				{
 					/*convert to mass fraction=moleFraction/1000*molecularMass*/
-					C_YI(c, thread, 0)=hCO3/1000*63;
-					C_YI(c, thread, 1)=h20/1000*18;
-					C_YI(c, thread, 2)=CO2/1000*44;
-					C_YI(c, thread, 3)=CO3m2/1000*62;
+					C_YI(c, thread, 1)=hCO3/1000*63;
+					C_YI(c, thread, 2)=CO3m2/1000*62;
+					C_YI(c, thread, 3)=CO2/1000*44;
+					C_YI(c, thread, 4)=h20/1000*18;
 				}
-			// else 
-			// 	{
-			// 		C_YI(c, thread, 0)=0.0;
-			// 		C_YI(c, thread, 1)=0.0;
-			// 		C_YI(c, thread, 2)=0.0;
-			// 		C_YI(c, thread, 3)=0.0;
-			// 	}	
+			else 
+				{
+					C_YI(c, thread, 0)=0.0;
+					C_YI(c, thread, 1)=0.0;
+					C_YI(c, thread, 2)=0.0;
+					C_YI(c, thread, 3)=0.0;
+					C_YI(c, thread, 4)=0.0;
+				}	
  
 			// if (c<=100)
 			// {
@@ -165,7 +169,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 	Thread * thread = Lookup_Thread (domain, interiorID); 
 	cell_t c;
 // #if RP_NODE
-	double hCO3,h20,CO2,CO3m2,totalCarbon;
+	double hCO3,h20,CO2,CO3m2,H,totalCarbon;
 
   // printf ("resetSpeciesFractionByPH si running\n");
   // fflush (stdout);
@@ -180,31 +184,34 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 				double cVOF=C_VOF(c,thread);
 
 			/* Those are mole concentration=massFraction/molecularMass*1000 */
-				 hCO3=C_YI(c, thread, 0)/63*1000;
-				 h20=C_YI(c, thread, 1)/18*1000;
-				 CO2=C_YI(c, thread, 2)/44*1000;
-				 CO3m2=C_YI(c, thread, 3)/62*1000;
+				 H=C_YI(c, thread, 0)/1*1000;
+				 hCO3=C_YI(c, thread, 1)/63*1000;
+				 CO3m2=C_YI(c, thread, 2)/62*1000;	
+				 CO2=C_YI(c, thread, 3)/44*1000;			
+				 h20=C_YI(c, thread, 4)/18*1000;
 				 totalCarbon=hCO3+CO2+CO3m2;
 			/* equilibrium mole fraction*/	 
+				 PH=-log10(H); /*convert mole concentration of proton to PH */
 				 hCO3=totalCarbon*getHCO3FractionByPH(PH);
 				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
 				 CO2=totalCarbon-hCO3-CO3m2;
-				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44))/18.0;
-				 if (cVOF>0.1)
-					{
-						/*convert to mass fraction=moleFraction/1000*molecularMass*/
-						C_YI(c, thread, 0)=hCO3/1000*63;
-						C_YI(c, thread, 1)=h20/1000*18;
-						C_YI(c, thread, 2)=CO2/1000*44;
-						C_YI(c, thread, 3)=CO3m2/1000*62;
-					}
-				else 
-					{
-						C_YI(c, thread, 0)=0.0;
-						C_YI(c, thread, 1)=0.0;
-						C_YI(c, thread, 2)=0.0;
-						C_YI(c, thread, 3)=0.0;
-					}	
+				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	    
+ 			if (cVOF>0.05)
+				{
+					/*convert to mass fraction=moleFraction/1000*molecularMass*/
+					C_YI(c, thread, 1)=hCO3/1000*63;
+					C_YI(c, thread, 2)=CO3m2/1000*62;
+					C_YI(c, thread, 3)=CO2/1000*44;
+					C_YI(c, thread, 4)=h20/1000*18;
+				}
+			else 
+				{
+					C_YI(c, thread, 0)=0.0;
+					C_YI(c, thread, 1)=0.0;
+					C_YI(c, thread, 2)=0.0;
+					C_YI(c, thread, 3)=0.0;
+					C_YI(c, thread, 4)=0.0;
+				}
 
 			if (c<=100)
 			{
@@ -233,7 +240,7 @@ DEFINE_ON_DEMAND(resetCount)
 
 
  
-DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species_index, to_index, to_species_index, d_mdot_d_vof_from,d_mdot_d_vof_to)
+DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index,from_species_index, to_index, to_species_index, d_mdot_d_vof_from,d_mdot_d_vof_to)
 {
 	real m_lg;
 	// real T_SAT = 373.15;
@@ -247,7 +254,7 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species
 	double cVOF,massTransferRate;
 	double verticalDistance=0.02;
 	double xp,yp,zp;
-	double CO2Gradient;
+	double CO2;
 	real P[3];
  
     massTransferRate=0.0;
@@ -257,7 +264,7 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species
 	// fflush (stdout);
    if (cVOF>=0.001 && cVOF<=0.7)
    {
-		CO2Gradient=C_YI(cell, threadMix,2)/44*1000;
+		CO2=C_YI(cell, threadMix,2)/44*1000;
 
 		// if (count<=100)
 		// {
@@ -266,7 +273,7 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2LossV2, cell, thread, from_index,from_species
 			// count++;
 		// }
 
-		massTransferRate=CO2Gradient*10;
+		massTransferRate=CO2*10;
 		// printf("massTransferRate is %f \n",massTransferRate);
 		fflush (stdout);
 	} 
