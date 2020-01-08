@@ -16,7 +16,13 @@ int counttt=0;
 
 double lightIntensity[]= {0,25,50,75,100,125,150,175,200,225,250,275,300,325,350,375,400,500,800,1000,2000};
 double growthRate[]= {0,2.50000000000000,2.70000000000000,2,1.50000000000000,1.30000000000000,1.20000000000000,1.10000000000000,1,0.900000000000000,0.800000000000000,0.750000000000000,0.730000000000000,0.710000000000000,0.680000000000000,0.600000000000000,0.550000000000000,0.500000000000000,0.400000000000000,0.300000000000000,0.300000000000000};
-int NSample=sizeof(lightIntensity)/sizeof(lightIntensity[0]);
+double PHData[]={0,1,2,3,4,4.50000000000000,5,5.50000000000000,6,6.37000000000000,6.50000000000000,7,7.50000000000000,7.60000000000000,8,8.38000000000000,8.50000000000000,9,9.05000000000000,9.50000000000000,10,10.3000000000000,10.5000000000000,11,11.5000000000000,12,13,14};
+double HCO3mData[]={0,0,0,0,0,0.0200000000000000,0.0500000000000000,0.135000000000000,0.300000000000000,0.500000000000000,0.600000000000000,0.810000000000000,0.930000000000000,0.950000000000000,0.970000000000000,0.976000000000000,0.970000000000000,0.963000000000000,0.962000000000000,0.890000000000000,0.670000000000000,0.500000000000000,0.400000000000000,0.180000000000000,0.0500000000000000,0,0,0};
+double CO2Data[]={1,1,1,1,1,0.980000000000000,0.950000000000000,0.865000000000000,0.700000000000000,0.500000000000000,0.400000000000000,0.190000000000000,0.0700000000000000,0.0500000000000000,0.0200000000000000,0.0120000000000000,0.0100000000000000,0.00200000000000000,0,0,0,0,0,0,0,0,0,0};
+double CO32mData[]={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.0100000000000000,0.0120000000000000,0.0200000000000000,0.0350000000000000,0.0380000000000000,0.110000000000000,0.330000000000000,0.500000000000000,0.600000000000000,0.820000000000000,0.950000000000000,1,1,1};
+
+int NSampleLight=sizeof(lightIntensity)/sizeof(lightIntensity[0]);
+int NSamplePH=sizeof(PHData)/sizeof(PHData[0]);
 
 double maxLightIntensity=500;
 static ND_Search *domain_table=NULL;
@@ -28,17 +34,17 @@ x=linspace(0,0.06,100);
  plot(x,y) 
  */
 
-double linearIntepolation(double intensity)
+double linearIntepolationLight(double intensity)
 	{
  
 		int i;
-		for(i=0;i<NSample-1;i++) 
+		for(i=0;i<NSampleLight-1;i++) 
 			{
 				if (intensity<lightIntensity[i+1])
 					break;
 			}
-		if (i==NSample-1)	
-			i=NSample-2;
+		if (i==NSampleLight-1)	
+			i=NSampleLight-2;
 
 		// printf("i=%d\n",i); 
 		double r=growthRate[i]+(growthRate[i]-growthRate[i+1])/(lightIntensity[i]-lightIntensity[i+1])*(intensity-lightIntensity[i]);
@@ -47,20 +53,31 @@ double linearIntepolation(double intensity)
 		return r;
 	}
 
+/* return an array [HCO3m,CO2,CO32m] */
+
+void linearIntepolationPH(double PH, double* result)
+	{
+ 
+		int i;
+		for(i=0;i<NSamplePH-1;i++) 
+			{
+				if (PH<PHData[i+1])
+					break;
+			}
+		if (i==NSamplePH-1)	
+			i=NSamplePH-2;
 
 
-double getHCO3FractionByPH(double PH)
-{
-		return 1./3;
+		result[0]=HCO3mData[i]+(HCO3mData[i]-HCO3mData[i+1])/(PHData[i]-PHData[i+1])*(PH-PHData[i]);
+		result[1]=CO2Data[i]+(CO2Data[i]-CO2Data[i+1])/(PHData[i]-PHData[i+1])*(PH-PHData[i]);
+		result[2]=1-result[0]-result[1];
 
-}
+		// printf("i=%d\n",i); 
+		// printf("result=%f,  %f ,  %f\n",result[0],result[1],result[2]);
+		// fflush (stdout);
+	}
 
-double getCO32mFractionByPH(double PH)
-{
-
-		return 1./3;
-}
-
+ 
 DEFINE_EXECUTE_ON_LOADING(Initialize, libname) 
 {
 	/* 1. calculate how many cells are in the filter each node. 
@@ -89,7 +106,8 @@ DEFINE_EXECUTE_ON_LOADING(Initialize, libname)
       totalCarbon[i] = 0.;
     }
   // srand (time (0) + myid * 123);  /* set seed for random number */
-	printf("NSample=%d\n",NSample);
+	printf("NSampleLight=%d\n",NSampleLight);
+	printf("NSamplePH=%d\n",NSamplePH);
 	double a=1e-10;
 	double b=-log10(a);
 	printf("b=%f\n",b);
@@ -122,10 +140,15 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 				 totalCarbon=hCO3+CO2+CO3m2;
 			/* equilibrium mole fraction*/	 
 				 PH=-log10(H); /*convert mole concentration of proton to PH */
-				 hCO3=totalCarbon*getHCO3FractionByPH(PH);
-				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
-				 CO2=totalCarbon-hCO3-CO3m2;
-				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	    
+				 double carbonFraction[3];
+				 linearIntepolationPH(PH, carbonFraction);
+			/* return an array [HCO3m,CO2,CO32m] */
+				 hCO3=totalCarbon*carbonFraction[0];
+				 CO2=totalCarbon*carbonFraction[1];
+				 CO3m2=totalCarbon-hCO3-CO2;
+ 				 // printf("PH=%f; carbonFraction=%f,  %f ,  %f\n",PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
+				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	 
+				    
  			if (cVOF>0.05)
 				{
 					/*convert to mass fraction=moleFraction/1000*molecularMass*/
@@ -133,6 +156,12 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 					C_YI(c, thread, 2)=CO3m2/1000*62;
 					C_YI(c, thread, 3)=CO2/1000*44;
 					C_YI(c, thread, 4)=h20/1000*18;
+
+					// C_YI(c, thread, 0)=0.1;
+					// C_YI(c, thread, 1)=0.1;
+					// C_YI(c, thread, 2)=0.1;
+					// C_YI(c, thread, 3)=0.1;
+					// C_YI(c, thread, 4)=0.1;
 				}
 			else 
 				{
@@ -142,18 +171,20 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 					C_YI(c, thread, 3)=0.0;
 					C_YI(c, thread, 4)=0.0;
 				}	
- 
+
 			// if (c<=100)
 			// {
 			// 	// printf("hCO3 is %f for cell %d in node %d \n",hCO3,c,myid);
 			// 	// printf("h20 is %f for cell %d in node %d \n",h20,c,myid);
 			// 	// printf("CO2 is %f for cell %d in node %d \n",CO2,c,myid);
 			// 	// printf("CO3m2 is %f for cell %d in node %d \n",CO3m2,c,myid);
-			// 	printf("hCO3 is %f for cell %d in node %d \n",C_YI(c, thread, 0),c,myid);
-			// 	printf("h20 is %f for cell %d in node %d \n",C_YI(c, thread, 1),c,myid);
-			// 	printf("CO2 is %f for cell %d in node %d \n",C_YI(c, thread, 2),c,myid);
-			// 	printf("CO3m2 is %f for cell %d in node %d \n",C_YI(c, thread, 3),c,myid);
+			// 	printf("H is %E for cell %d in node %d \n",C_YI(c, thread, 0),c,myid);
+			// 	printf("hCO3 is %f for cell %d in node %d \n",C_YI(c, thread, 1),c,myid);
+			// 	printf("CO3m2 is %f for cell %d in node %d \n",C_YI(c, thread, 2),c,myid);
+			// 	printf("CO2 is %f for cell %d in node %d \n",C_YI(c, thread, 3),c,myid);
+			// 	printf("h20 is %f for cell %d in node %d \n",C_YI(c, thread, 4),c,myid);
 			// }
+ 
 		} 
 
 	end_c_loop (c, thread);
@@ -192,10 +223,14 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 				 totalCarbon=hCO3+CO2+CO3m2;
 			/* equilibrium mole fraction*/	 
 				 PH=-log10(H); /*convert mole concentration of proton to PH */
-				 hCO3=totalCarbon*getHCO3FractionByPH(PH);
-				 CO3m2=totalCarbon*getCO32mFractionByPH(PH);
-				 CO2=totalCarbon-hCO3-CO3m2;
-				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	    
+				 double carbonFraction[3];
+				 linearIntepolationPH(PH, carbonFraction);
+			/* return an array [HCO3m,CO2,CO32m] */
+				 hCO3=totalCarbon*carbonFraction[0];
+				 CO2=totalCarbon*carbonFraction[1];
+				 CO3m2=totalCarbon-hCO3-CO2;
+ 				 // printf("PH=%f; carbonFraction=%f,  %f ,  %f\n",PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
+				 h20=(1000-(hCO3*63+CO3m2*62+CO2*44+H*1))/18.0;	 
  			if (cVOF>0.05)
 				{
 					/*convert to mass fraction=moleFraction/1000*molecularMass*/
@@ -213,17 +248,18 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 					C_YI(c, thread, 4)=0.0;
 				}
 
-			if (c<=100)
-			{
-				// printf("hCO3 is %f for cell %d in node %d \n",hCO3,c,myid);
-				// printf("h20 is %f for cell %d in node %d \n",h20,c,myid);
-				// printf("CO2 is %f for cell %d in node %d \n",CO2,c,myid);
-				// printf("CO3m2 is %f for cell %d in node %d \n",CO3m2,c,myid);
-				printf("hCO3 is %f for cell %d , cVOF=%f, in node %d \n",C_YI(c, thread, 0),c,cVOF,myid);
-				printf("h20 is %f for cell %d in node %d \n",C_YI(c, thread, 1),c,myid);
-				printf("CO2 is %f for cell %d in node %d \n",C_YI(c, thread, 2),c,myid);
-				printf("CO3m2 is %f for cell %d in node %d \n",C_YI(c, thread, 3),c,myid);
-			}
+			// if (c<=100)
+			// {
+			// 	// printf("hCO3 is %f for cell %d in node %d \n",hCO3,c,myid);
+			// 	// printf("h20 is %f for cell %d in node %d \n",h20,c,myid);
+			// 	// printf("CO2 is %f for cell %d in node %d \n",CO2,c,myid);
+			// 	// printf("CO3m2 is %f for cell %d in node %d \n",CO3m2,c,myid);
+			// 	printf("hCO3 is %f for cell %d , cVOF=%f, in node %d \n",C_YI(c, thread, 0),c,cVOF,myid);
+			// 	printf("h20 is %f for cell %d in node %d \n",C_YI(c, thread, 1),c,myid);
+			// 	printf("CO2 is %f for cell %d in node %d \n",C_YI(c, thread, 2),c,myid);
+			// 	printf("CO3m2 is %f for cell %d in node %d \n",C_YI(c, thread, 3),c,myid);
+			// }
+			// fflush (stdout);
 		}
 	end_c_loop (c, thread);
 }
@@ -268,9 +304,9 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index,from_species_i
 
 		// if (count<=100)
 		// {
-			// C_CENTROID(P,cell,threadMix);
-			// printf("CO2Gradient is %f for cell %d ; Pz=%f, in node %d  ",CO2Gradient,cell,P[2],myid);
-			// count++;
+		// 	C_CENTROID(P,cell,threadMix);
+		// 	printf("CO2Gradient is %f for cell %d ; Pz=%f, in node %d  ",CO2,cell,P[2],myid);
+		// 	count++;
 		// }
 
 		massTransferRate=CO2*10;
@@ -312,11 +348,10 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 
 		 	double I=1./exp(250*(lightDepth))*500;
  
-		 	double reactionRate=linearIntepolation(I);
+		 	double reactionRate=linearIntepolationLight(I);
 
 			// if (c<=100)
 			// {
-		 // 		printf("z:%f for cell %d in node %d; I=%f \n",x[2],c,myid,I);
 			// 	printf("z:%f for cell %d in node %d; I=%f; reactionRate=%f \n",x[2],c,myid,I,reactionRate);
 			// }
 
@@ -355,6 +390,18 @@ DEFINE_LINEARIZED_MASS_TRANSFER(evaporation, cell, thread, from_index,from_speci
    return (massTransferRate);
 }
 
+
+// DEFINE_ON_DEMAND(testLinearIntepolationPH)
+// {
+// 	double ph=9.75;
+// 	double result[3];
+// 	linearIntepolationPH(ph, result);
+
+// 	printf("result2=%f,  %f ,  %f\n",result[0],result[1],result[2]);
+// 	fflush (stdout);
+
+
+// }
 
 // DEFINE_ON_DEMAND(testFindCell)
 // {
