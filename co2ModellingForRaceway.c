@@ -5,6 +5,7 @@
 
 double PH = 8.0;
 double *totalCarbon;
+// int interiorIDs[] = {3};
 int interiorIDs[] = { 3, 12, 16 };
 int interiorIDLength;
 int count;
@@ -83,7 +84,7 @@ DEFINE_EXECUTE_ON_LOADING(Initialize, libname)
 		printf("NSampleLight=%d\n", NSampleLight);
 		printf("NSamplePH=%d\n", NSamplePH);
 		printf("interiorIDLength=%d\n", interiorIDLength);
-		printf("/*This is Version 1.3 */\n");
+		printf("/*This is Version 1.4 */\n");
 	#endif
 	fflush(stdout);
 }
@@ -112,22 +113,29 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 			h20 = C_YI(c, thread, 4) / 18 * 1000;
 			totalCarbon = hCO3 + CO2 + CO3m2;
 			/*equilibrium mole fraction*/
-			PH = -log10(H); /*convert mole concentration of proton to PH */
+			if (H<1e-17)
+				PH=7; /* if it is at air phase and H is zero, assume the PH is 7*/
+			else
+				PH = -log10(H); /*convert mole concentration of proton to PH */
+			
 			double carbonFraction[3];
 			linearIntepolationPH(PH, carbonFraction);
 			/*return an array[HCO3m,CO2,CO32m] */
 			hCO3 = totalCarbon *carbonFraction[0];
 			CO2 = totalCarbon *carbonFraction[1];
 			CO3m2 = totalCarbon - hCO3 - CO2;
-			// printf("PH=%f; carbonFraction=%f,  %f,  %f\n",PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
-			h20 = (1000 - (hCO3 * 63 + CO3m2 * 62 + CO2 * 44 + H *1)) / 18.0;
 
+			// if (c<100)
+			// 	{
+			// 		printf("H=%E, PH=%f; carbonFraction=%f,  %f,  %f\n",H,PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
+			// 	}
+
+			h20 = (1000 - (hCO3 * 63 + CO3m2 * 62 + CO2 * 44 + H *1)) / 18.0;
 			if (cVOF > 1e-8)
 			{
-				C_YI(c, thread, 0) = 1e-13;
-				C_YI(c, thread, 1) = 0.001;
-				C_YI(c, thread, 2) = 0.002;
-				C_YI(c, thread, 3) = 0.003;
+				C_YI(c, thread, 1)=hCO3/1000*63;
+				C_YI(c, thread, 2)=CO3m2/1000*62;
+				C_YI(c, thread, 3)=CO2/1000*44;
 				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
 			}
 		}
@@ -211,22 +219,30 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 			CO2 = C_YI(c, thread, 3) / 44 * 1000;
 			h20 = C_YI(c, thread, 4) / 18 * 1000;
 			totalCarbon = hCO3 + CO2 + CO3m2;
+
 			/*equilibrium mole fraction*/
-			PH = -log10(H); /*convert mole concentration of proton to PH */
+			if (H<1e-17)
+				PH=7; /* if it is at air phase and H is zero, assume the PH is 7*/
+			else
+				PH = -log10(H); /*convert mole concentration of proton to PH */
 			double carbonFraction[3];
 			linearIntepolationPH(PH, carbonFraction);
 			/*return an array[HCO3m,CO2,CO32m] */
 			hCO3 = totalCarbon *carbonFraction[0];
 			CO2 = totalCarbon *carbonFraction[1];
 			CO3m2 = totalCarbon - hCO3 - CO2;
-			// printf("PH=%f; carbonFraction=%f,  %f,  %f\n",PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
+
+			// if (c<100)
+			// 	{
+			// 		printf("H=%E, PH=%f; carbonFraction=%f,  %f,  %f\n",H,PH,carbonFraction[0],carbonFraction[1],carbonFraction[2]);
+			// 	}
+
 			h20 = (1000 - (hCO3 * 63 + CO3m2 * 62 + CO2 * 44 + H *1)) / 18.0;
 			if (cVOF > 1e-8)
 			{
 				C_YI(c, thread, 1)=hCO3/1000*63;
 				C_YI(c, thread, 2)=CO3m2/1000*62;
 				C_YI(c, thread, 3)=CO2/1000*44;
-				C_YI(c, thread, 4)=h20/1000*18;
 				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
 			}
 		}
@@ -243,6 +259,8 @@ DEFINE_ON_DEMAND(resetCount)
 
 }
 
+ 
+
 DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index, from_species_index, to_index, to_species_index, d_mdot_d_vof_from, d_mdot_d_vof_to)
 {
 	real m_lg;
@@ -253,21 +271,18 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index, from_species_
 	// printf ("co2Loss is running\n");
 	// fflush (stdout);
 	Domain *domain = Get_Domain(3); /*1 is for single phase */
+	// Thread *threadMix = Lookup_Thread(domain, interiorIDs[0]);
 	double cVOF, massTransferRate;
 	double verticalDistance = 0.02;
 	double xp, yp, zp;
 	double CO2;
-	real P[3];
 
 	massTransferRate = 0.0;
-
 	cVOF = C_VOF(cell, liq);
-	//   	printf ("cVOF is %f\n",cVOF);
-	// fflush (stdout);
+
 	if (cVOF >= 0.001 && cVOF <= 0.9)
 	{
-		CO2 = C_YI(cell, thread, 2) / 44 * 1000;
-
+		CO2 = C_YI(cell, liq, 3) / 44 * 1000;
 		massTransferRate = CO2 * 10;
 		// printf("massTransferRate is %f \n",massTransferRate);
 		fflush(stdout);
@@ -276,42 +291,6 @@ DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index, from_species_
 	return (massTransferRate);
 	// return (0.0);
 }
-
-
-// DEFINE_LINEARIZED_MASS_TRANSFER(co2Loss, cell, thread, from_index, from_species_index, to_index, to_species_index, d_mdot_d_vof_from, d_mdot_d_vof_to)
-// {
-// 	real m_lg;
-// 	// real T_SAT = 373.15;
-// 	Thread *liq = THREAD_SUB_THREAD(thread, from_index);
-// 	Thread *gas = THREAD_SUB_THREAD(thread, to_index);
-
-// 	// printf ("co2Loss is running\n");
-// 	// fflush (stdout);
-// 	Domain *domain = Get_Domain(3); /*1 is for single phase */
-// 	Thread *threadMix = Lookup_Thread(domain, interiorID);
-// 	double cVOF, massTransferRate;
-// 	double verticalDistance = 0.02;
-// 	double xp, yp, zp;
-// 	double CO2;
-// 	real P[3];
-
-// 	massTransferRate = 0.0;
-
-// 	cVOF = C_VOF(cell, liq);
-// 	//   	printf ("cVOF is %f\n",cVOF);
-// 	// fflush (stdout);
-// 	if (cVOF >= 0.001 && cVOF <= 0.7)
-// 	{
-// 		CO2 = C_YI(cell, threadMix, 2) / 44 * 1000;
-
-// 		massTransferRate = CO2 * 10;
-// 		// printf("massTransferRate is %f \n",massTransferRate);
-// 		fflush(stdout);
-// 	}
-
-// 	return (massTransferRate);
-// 	// return (0.0);
-// }
 
 
 DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
@@ -353,15 +332,11 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 
 DEFINE_LINEARIZED_MASS_TRANSFER(evaporation, cell, thread, from_index, from_species_index, to_index, to_species_index, d_mdot_d_vof_from, d_mdot_d_vof_to)
 {
-	real m_lg;
-	// real T_SAT = 373.15;
 	Thread *liq = THREAD_SUB_THREAD(thread, from_index);
 	Thread *gas = THREAD_SUB_THREAD(thread, to_index);
 	int cID;
 	double cVOF, massTransferRate;
-	// printf("this is cell  111111111111111111111111111\n");
-	m_lg = 0.;
-
+	
 	massTransferRate = 0.0;
 	cID = cell;
 	cVOF = C_VOF(cell, liq);
