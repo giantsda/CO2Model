@@ -93,6 +93,9 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 	count = 0;
 	double hCO3, h20, CO2, CO3m2, H, totalCarbon;
 	int i;
+#if !RP_NODE
+	printf("UDF is running \n");
+#endif
 
 	for (i = 0; i < interiorIDLength; i++)
 	{
@@ -129,9 +132,19 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
 			}
 		}
-
 		end_c_loop(c, thread);
 	}
+
+/*reset VOF for rotate zone*/
+
+	thread = Lookup_Thread(domain, 16);
+		begin_c_loop(c, thread)
+		{		
+			double cVOF = C_VOF(c, thread);
+			if (cVOF<0.001)
+				C_VOF(c, thread)=0.;
+		}
+		end_c_loop(c, thread);
 
 	fflush(stdout);
 }
@@ -164,27 +177,38 @@ DEFINE_ON_DEMAND(manuallyPatch)
 }
 
 
-/*   DEFINE_ON_DEMAND(resetDensity)
+DEFINE_ON_DEMAND(resetDensity)
 {
 	cell_t c;
+	// #if RP_NODE
 	double hCO3, h20, CO2, CO3m2, H, totalCarbon;
-	Domain *domain = Get_Domain(1);  
+	Domain *domain = Get_Domain(3); /*1 is for single phase */
 	Thread * thread;
 	printf ("manuallyPatch is running\n");
-	for (int i = 0; i < interiorIDLength; i++)
-	{
-		thread = Lookup_Thread(domain, interiorIDs[i]);
+		thread = Lookup_Thread(domain, 16);
 		begin_c_loop(c, thread)
-		{
-				C_R(c, thread) = 1998.22233;
+		{		
+			double cVOF = C_VOF(c, thread);
+			if (cVOF<0.001)
+				C_VOF(c, thread)=0.;
+
+				// C_YI(c, thread, 0) = 0;
+				// C_YI(c, thread, 1) = 0;
+				// C_YI(c, thread, 2) = 0;
+				// C_YI(c, thread, 3) = 0;
+				// C_YI(c, thread, 4) = 0;
+				// double density=C_R(c, thread);
+
+
+				// if (c<200)
+				// 	printf("density for cell %d is %f \n",c,density);
+
+				// C_R(c, thread) = 1223.22233;
 		}
 
 		end_c_loop(c, thread);
-	}
 	fflush(stdout);
-}  
-
-			*/
+}
 
 
 
@@ -281,12 +305,12 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 	{
 		real x[ND_ND];
 		C_CENTROID(x, c, t);
-		double lightDepth = phaseLevel - x[2];
+		double lightDepth = phaseLevel - x[1];
 		if (lightDepth < 0)
 			lightDepth = 0.;
 
 		double I = 1. / exp(250 *(lightDepth)) *500;
-		double reactionRate = linearIntepolationLight(I);
+		double reactionRate = linearIntepolationLight(I)/20;
 		fflush(stdout);
 		*rr = reactionRate;
 	}
