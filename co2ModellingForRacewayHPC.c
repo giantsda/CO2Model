@@ -13,15 +13,19 @@ int numberOfCells;
 double phaseLevel = 0.20;
 /* double phaseLevel = 0.06;  */
 
-double lightIntensity[] = { 0, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 500, 800, 1000, 2000 };
-double growthRate[] = { 0, 2.50000000000000, 2.70000000000000, 2, 1.50000000000000, 1.30000000000000, 1.20000000000000, 1.10000000000000, 1, 0.900000000000000, 0.800000000000000, 0.750000000000000, 0.730000000000000, 0.710000000000000, 0.680000000000000, 0.600000000000000, 0.550000000000000, 0.500000000000000, 0.400000000000000, 0.300000000000000, 0.300000000000000 };
-double PHData[] = { 0, 1, 2, 3, 4, 4.50000000000000, 5, 5.50000000000000, 6, 6.37000000000000, 6.50000000000000, 7, 7.50000000000000, 7.60000000000000, 8, 8.38000000000000, 8.50000000000000, 9, 9.05000000000000, 9.50000000000000, 10, 10.3000000000000, 10.5000000000000, 11, 11.5000000000000, 12, 13, 14 };
-double HCO3mData[] = { 0, 0, 0, 0, 0, 0.0200000000000000, 0.0500000000000000, 0.135000000000000, 0.300000000000000, 0.500000000000000, 0.600000000000000, 0.810000000000000, 0.930000000000000, 0.950000000000000, 0.970000000000000, 0.976000000000000, 0.970000000000000, 0.963000000000000, 0.962000000000000, 0.890000000000000, 0.670000000000000, 0.500000000000000, 0.400000000000000, 0.180000000000000, 0.0500000000000000, 0, 0, 0 };
-double CO2Data[] = { 1, 1, 1, 1, 1, 0.980000000000000, 0.950000000000000, 0.865000000000000, 0.700000000000000, 0.500000000000000, 0.400000000000000, 0.190000000000000, 0.0700000000000000, 0.0500000000000000, 0.0200000000000000, 0.0120000000000000, 0.0100000000000000, 0.00200000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-double CO32mData[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0100000000000000, 0.0120000000000000, 0.0200000000000000, 0.0350000000000000, 0.0380000000000000, 0.110000000000000, 0.330000000000000, 0.500000000000000, 0.600000000000000, 0.820000000000000, 0.950000000000000, 1, 1, 1 };
+double lightIntensity[] = { 0,250,375,500,625,750,1000,1250,1500,2000};
+double growthRate[] = {0,210,290,350,400,420,450,460,460,460};
+double PHData[] = { 0, 1, 2, 3, 4, 4.500, 5, 5.500, 6, 6.370, 6.500, 7, 7.500, 7.600, 8, 8.380, 8.500, 9, 9.050, 9.500, 10, 10.30, 10.50, 11, 11.50, 12, 13, 14 };
+double HCO3mData[] = { 0, 0, 0, 0, 0, 0.02000, 0.05000, 0.1350, 0.3000, 0.5000, 0.6000, 0.8100, 0.9300, 0.9500, 0.9700, 0.9760, 0.9700, 0.9630, 0.9620, 0.8900, 0.6700, 0.5000, 0.4000, 0.1800, 0.05000, 0, 0, 0 };
+double CO2Data[] = { 1, 1, 1, 1, 1, 0.9800, 0.9500, 0.8650, 0.7000, 0.5000, 0.4000, 0.1900, 0.07000, 0.05000, 0.02000, 0.01200, 0.01000, 0.002000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+double CO32mData[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01000, 0.01200, 0.02000, 0.03500, 0.03800, 0.1100, 0.3300, 0.5000, 0.6000, 0.8200, 0.9500, 1, 1, 1 };
+double PHforEfficiency[]={0,6.500,6.550,6.600,6.650,6.700,6.750,6.800,6.850,6.900,6.950,7,7.050,7.100,7.150,7.200,7.250,7.300,7.350,7.400,7.450,7.500,7.550,7.600,7.650,7.700,7.750,7.800,7.850,7.900,7.950,8,8.050,8.100,8.150,8.200,8.250,8.300,8.350,8.400,8.450,8.500,100};
+double Pefficiency[]={0,0,1.25737682214811e-05,3.99593527672633e-05,0.000119296591353013,0.000334575564412215,0.000881489205918614,0.00218170673761439,0.00507262014324939,0.0110796210298451,0.0227339062539777,0.0438207512339213,0.0793491295891684,0.134977416282970,0.215693297066280,0.323793989164730,0.456622713472555,0.604926811297858,0.752843580387010,0.880163316910750,0.966670292007123,0.997355701003582,0.966670292007123,0.880163316910750,0.752843580387010,0.604926811297858,0.456622713472555,0.323793989164730,0.215693297066280,0.134977416282970,0.0793491295891684,0.0438207512339213,0.0227339062539774,0.0110796210298451,0.00507262014324939,0.00218170673761443,0.000881489205918614,0.000334575564412209,0.000119296591353013,3.99593527672633e-05,1.25737682214813e-05,0,0};
+
 
 int NSampleLight = sizeof(lightIntensity) / sizeof(lightIntensity[0]);
 int NSamplePH = sizeof(PHData) / sizeof(PHData[0]);
+int NSamplePefficiency = sizeof(PHforEfficiency) / sizeof(PHforEfficiency[0]);
 
 double maxLightIntensity = 500;
 static ND_Search *domain_table = NULL;
@@ -32,6 +36,25 @@ x=linspace(0,0.06,100);
  plot(x,y) 
  */
 
+double linearIntepolationPefficiency(double PHinPut)
+{
+	int i;
+	for (i = 0; i < NSamplePefficiency - 1; i++)
+	{
+		if (PHinPut < PHforEfficiency[i + 1])
+			break;
+	}
+
+	if (i == NSampleLight - 1)
+		i = NSampleLight - 2;
+
+	double r = Pefficiency[i] + (Pefficiency[i] - Pefficiency[i + 1]) / (PHforEfficiency[i] - PHforEfficiency[i + 1]) *(PHinPut - PHforEfficiency[i]);
+    /* printf("r=%f and  %f,  %f\n",r, Pefficiency[i],Pefficiency[i+1]); */
+
+	return r;
+}
+
+  
 double linearIntepolationLight(double intensity)
 {
 	int i;
@@ -49,6 +72,7 @@ double linearIntepolationLight(double intensity)
 
 	return r;
 }
+
 
 /*return an array[HCO3m,CO2,CO32m] */
 
@@ -177,12 +201,12 @@ DEFINE_ON_DEMAND(manuallyPatch)
 }
 
 
-DEFINE_ON_DEMAND(resetDensity)
+/* DEFINE_ON_DEMAND(resetDensity)
 {
 	cell_t c;
-	// #if RP_NODE
+
 	double hCO3, h20, CO2, CO3m2, H, totalCarbon;
-	Domain *domain = Get_Domain(3); /*1 is for single phase */
+	Domain *domain = Get_Domain(3); 
 	Thread * thread;
 	printf ("manuallyPatch is running\n");
 		thread = Lookup_Thread(domain, 16);
@@ -192,24 +216,28 @@ DEFINE_ON_DEMAND(resetDensity)
 			if (cVOF<0.001)
 				C_VOF(c, thread)=0.;
 
-				// C_YI(c, thread, 0) = 0;
-				// C_YI(c, thread, 1) = 0;
-				// C_YI(c, thread, 2) = 0;
-				// C_YI(c, thread, 3) = 0;
-				// C_YI(c, thread, 4) = 0;
-				// double density=C_R(c, thread);
 
-
-				// if (c<200)
-				// 	printf("density for cell %d is %f \n",c,density);
-
-				// C_R(c, thread) = 1223.22233;
 		}
 
 		end_c_loop(c, thread);
 	fflush(stdout);
-}
+}     */
 
+
+
+
+/* DEFINE_ON_DEMAND(test_linearIntepolationPefficiency)
+{
+	double phT;
+	for (int i=0;i<29;i++)
+	{
+		phT=2./30*i+7.5;
+		double E=linearIntepolationPefficiency(phT);
+		printf("ph=%f,E=%f; \n",phT,E);
+	}
+
+	fflush(stdout);
+}   */
 
 
 DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
@@ -300,6 +328,9 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 	Thread *tp = pt[0];	 /* primary */
 	Thread *ts = pt[1];	 /* secondary */
 	double cVOF = C_VOF(c, ts);
+	double H=C_YI(c, ts, 1) / 1 * 1000;
+	PH = -log10(H); /*convert mole concentration of proton to PH */
+ 	double Pefficiency=linearIntepolationPefficiency(PH);
 
 	if (cVOF > 0.1)
 	{
@@ -310,9 +341,9 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 			lightDepth = 0.;
 
 		double I = 1. / exp(250 *(lightDepth)) *500;
-		double reactionRate = linearIntepolationLight(I)/20;
+		double reactionRate = linearIntepolationLight(I)/80;
 		fflush(stdout);
-		*rr = reactionRate;
+		*rr = reactionRate/200*Pefficiency;
 	}
 	else
 	{
