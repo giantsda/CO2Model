@@ -14,6 +14,7 @@ double phaseLevel = 0.20;
 /* double phaseLevel = 0.06;  */
 
 double lightIntensity[] = { 0,250,375,500,625,750,1000,1250,1500,2000};
+/* O2 evuolution rate umol/mg Chla /h*/
 double growthRate[] = {0,210,290,350,400,420,450,460,460,460};
 double PHData[] = { 0, 1, 2, 3, 4, 4.500, 5, 5.500, 6, 6.370, 6.500, 7, 7.500, 7.600, 8, 8.380, 8.500, 9, 9.050, 9.500, 10, 10.30, 10.50, 11, 11.50, 12, 13, 14 };
 double HCO3mData[] = { 0, 0, 0, 0, 0, 0.02000, 0.05000, 0.1350, 0.3000, 0.5000, 0.6000, 0.8100, 0.9300, 0.9500, 0.9700, 0.9760, 0.9700, 0.9630, 0.9620, 0.8900, 0.6700, 0.5000, 0.4000, 0.1800, 0.05000, 0, 0, 0 };
@@ -27,6 +28,7 @@ int NSampleLight = sizeof(lightIntensity) / sizeof(lightIntensity[0]);
 int NSamplePH = sizeof(PHData) / sizeof(PHData[0]);
 int NSamplePefficiency = sizeof(PHforEfficiency) / sizeof(PHforEfficiency[0]);
 
+double cellDensity = 60; /* mg/L */
 double maxLightIntensity = 500;
 static ND_Search *domain_table = NULL;
 
@@ -69,8 +71,9 @@ double linearIntepolationLight(double intensity)
 
 	double r = growthRate[i] + (growthRate[i] - growthRate[i + 1]) / (lightIntensity[i] - lightIntensity[i + 1]) *(intensity - lightIntensity[i]);
     /* printf("r=%f and  %f,  %f\n",r, growthRate[i],growthRate[i+1]); */
-
+	r=r/3.8333e-07* 5.0505e-08;
 	return r;
+	/* Normalized to Douchi, Damien’s prediction because Peer's prediction is based on O2 evolution and is not clear how to convert to C consumption.*/
 }
 
 
@@ -104,18 +107,29 @@ DEFINE_EXECUTE_ON_LOADING(Initialize, libname)
 		printf("NSampleLight=%d\n", NSampleLight);
 		printf("NSamplePH=%d\n", NSamplePH);
 		printf("interiorIDLength=%d\n", interiorIDLength);
-		printf("/*This is Version 1.4 */\n");
+		printf("/*This is Version 1.5 */\n");
 	#endif
 	fflush(stdout);
 }
 
-DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
+DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 {
+	/* At the end of each time step, we need to perform:
+	1.get the mass fraction of all the species.
+	2. predict the reaction rate and manually predict the H consumption.
+	3. get the PH at the beginning of this time step by accessing UDM.
+	4. get the OH at the beginning of this time step and with the [H] at the end of this time step.
+	5. build a parabola equation and pick the correct root and update the PH.
+	6. reset the species fraction by the new PH.
+
+	*/
 	Domain *domain = Get_Domain(3); /*1 is for single phase */
 	Thread * thread;
 	cell_t c;
 	count = 0;
-	double hCO3, h20, CO2, CO3m2, H, totalCarbon;
+	double hCO3, h20, CO2, CO3m2, H,OH,totalCarbon,lastPH,lastOH,lastH,bb,cc,delta,x1,x2;
+	double reactionRate,reactionRateTemp,lightDepth,I;
+	real x[ND_ND];
 	int i;
 #if !RP_NODE
 	printf("UDF is running \n");
@@ -129,17 +143,83 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 			double cVOF = C_VOF(c, thread);
 			/*Those are mole concentration=massFraction/molecularMass*1000 */
 			H = C_YI(c, thread, 0) / 1 * 1000;
-			hCO3 = C_YI(c, thread, 1) / 63 * 1000;
-			CO3m2 = C_YI(c, thread, 2) / 62 * 1000;
-			CO2 = C_YI(c, thread, 3) / 44 * 1000;
-			h20 = C_YI(c, thread, 4) / 18 * 1000;
+			OH = C_YI(c, thread, 1) / 17 * 1000;
+			hCO3 = C_YI(c, thread, 2) / 63 * 1000;
+			CO3m2 = C_YI(c, thread, 3) / 62 * 1000;
+			CO2 = C_YI(c, thread, 4) / 44 * 1000;
+			h20 = C_YI(c, thread, 5) / 18 * 1000;
 			totalCarbon = hCO3 + CO2 + CO3m2;
-			/*equilibrium mole fraction*/
+		/*get the PH at this time, It is assumed that PH does not change much during Dt. */		
 			if (H<1e-17)
-				PH=7; /* if it is at air phase and H is zero, assume the PH is 7*/
+				PH=7;  /*if it is at air phase and H is zero, assume the PH is 7*/
 			else
 				PH = -log10(H); /*convert mole concentration of proton to PH */
-			
+			/* predict the proton consumption rate.*/
+			double Pefficiency=(-1.61+0.47*PH-0.03*PH*PH)/0.2308333333; /*from https://link.springer.com/article/10.1007/s10811-013-0177-2 */
+			if (Pefficiency<0.)
+				Pefficiency=0.0;
+			if (cVOF > 0.1)
+			{
+
+				C_CENTROID(x, c, thread);
+				lightDepth = phaseLevel - x[1];
+				if (lightDepth < 0)
+					lightDepth = 0.;
+
+				I = 1. / exp(250 *(lightDepth)) *1500;
+				reactionRateTemp = linearIntepolationLight(I);
+				fflush(stdout);
+				reactionRate = reactionRateTemp*3/1000000*Pefficiency/3600; /*mol/L/s or SI units kmol/m3/s*/
+			}
+			else
+			{
+				reactionRate=0.;
+			}
+
+			H=H-CURRENT_TIMESTEP*reactionRate; /*New [H] after proton consumption*/ 
+			if (H<0)
+				H=0.;
+
+			/*check */
+		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+			{
+				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, r is %E, PH is %f, Pefficiency is %f, and now [H] is %E, [OH] is %E",
+					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
+			}
+			fflush(stdout);
+
+		    /* solve for parabola equation*/
+ 			bb=H+OH;
+ 			cc=H*OH-1e-14;
+ 			delta=bb*bb-4*1*cc;
+ 			x1=(-bb+sqrt(delta))/2;
+ 			x2=(-bb-sqrt(delta))/2;
+ 			double testH=H+x1;
+			double testOH=OH+x1;
+			if (testH<0 || testOH<0)
+			{
+				H=H+x2;
+				OH=OH+x2;
+			}
+			else
+			{
+				H=H+x1;
+				OH=OH+x1;
+			}
+			/*check */
+		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+			{
+				printf("x1=%E,x2=%E,H*OH is %E, myid=%d  \n",x1,x2,H*OH,myid);
+				count++;
+			}
+			fflush(stdout);
+
+			/* update PH */
+			if (H<1e-17)
+				PH=7;  /*if it is at air phase and H is zero, assume the PH is 7*/
+			else
+				PH = -log10(H); /*convert mole concentration of proton to PH */
+
 			double carbonFraction[3];
 			linearIntepolationPH(PH, carbonFraction);
 			/*return an array[HCO3m,CO2,CO32m] */
@@ -150,10 +230,12 @@ DEFINE_EXECUTE_AT_END(resetSpeciesFraction)
 			h20 = (1000 - (hCO3 * 63 + CO3m2 * 62 + CO2 * 44 + H *1)) / 18.0;
 			if (cVOF > 1e-8)
 			{
-				C_YI(c, thread, 1)=hCO3/1000*63;
-				C_YI(c, thread, 2)=CO3m2/1000*62;
-				C_YI(c, thread, 3)=CO2/1000*44;
-				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
+				C_YI(c, thread, 0)=H/1000*1;
+				C_YI(c, thread, 1)=H/1000*17;
+				C_YI(c, thread, 2)=hCO3/1000*63;
+				C_YI(c, thread, 3)=CO3m2/1000*62;
+				C_YI(c, thread, 4)=CO2/1000*44;
+				C_YI(c, thread, 5) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3) - C_YI(c, thread, 4);
 			}
 		}
 		end_c_loop(c, thread);
@@ -178,7 +260,7 @@ DEFINE_ON_DEMAND(manuallyPatch)
 	cell_t c;
 	Domain *domain = Get_Domain(3); /*1 is for single phase */
 	Thread * thread;
-	printf ("manuallyPatch is running\n");
+	printf ("manuallyPatch is running and interiorIDLength is %d\n",interiorIDLength);
 	int i;
 	for (i = 0; i < interiorIDLength; i++)
 	{
@@ -186,13 +268,16 @@ DEFINE_ON_DEMAND(manuallyPatch)
 		begin_c_loop(c, thread)
 		{
 			double cVOF = C_VOF(c, thread);
-			if (cVOF > 1e-8)
+			if (cVOF > 1e-5)
 			{
-				C_YI(c, thread, 0) = 1e-13;
-				C_YI(c, thread, 1) = 0.001;
-				C_YI(c, thread, 2) = 0.002;
-				C_YI(c, thread, 3) = 0.003;
-				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
+				C_YI(c, thread, 0) = 1e-11;
+				double H = C_YI(c, thread, 0) / 1 * 1000;
+				double OH=1e-14/H;
+				C_YI(c, thread, 1) = OH/1000*17;
+				C_YI(c, thread, 2) = 6.3e-4;
+				C_YI(c, thread, 3) = 6.2e-4;
+				C_YI(c, thread, 4) = 4.4e-4;
+				C_YI(c, thread, 5) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3)- C_YI(c, thread, 4);
 			}
 		}
 		end_c_loop(c, thread);
@@ -200,6 +285,31 @@ DEFINE_ON_DEMAND(manuallyPatch)
 	fflush(stdout);
 }
 
+DEFINE_ON_DEMAND(SetInitialUDM)
+{
+	Domain *domain = Get_Domain(3); /*1 is for single phase */
+	Thread * thread;
+	cell_t c;
+ 	double H;
+	int i; 
+	i=0;
+ 
+
+	for (i = 0; i < interiorIDLength; i++)
+	{
+		thread = Lookup_Thread(domain, interiorIDs[i]);
+			begin_c_loop(c, thread)
+			{		
+				H = C_YI(c, thread, 0) / 1 * 1000;
+				if (H<1e-17)
+					PH=7; /* if it is at air phase and H is zero, assume the PH is 7*/
+				else
+					PH = -log10(H); /*convert mole concentration of proton to PH */
+				C_UDMI(c, thread, 0) = PH;
+			}
+			end_c_loop(c, thread);
+	}
+}     
 
 /* DEFINE_ON_DEMAND(resetDensity)
 {
@@ -240,33 +350,114 @@ DEFINE_ON_DEMAND(manuallyPatch)
 }   */
 
 
-DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
+DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 {
+	/* At the end of each time step, we need to perform:
+	1.get the mass fraction of all the species.
+	2. predict the reaction rate and manually predict the H consumption.
+	3. get the PH at the beginning of this time step by accessing UDM.
+	4. get the OH at the beginning of this time step and with the [H] at the end of this time step.
+	5. build a parabola equation and pick the correct root and update the PH.
+	6. reset the species fraction by the new PH.
+
+	*/
 	Domain *domain = Get_Domain(3); /*1 is for single phase */
 	Thread * thread;
 	cell_t c;
-	double hCO3, h20, CO2, CO3m2, H, totalCarbon;
+	count = 0;
+	double hCO3, h20, CO2, CO3m2, H,OH,totalCarbon,lastPH,lastOH,lastH,bb,cc,delta,x1,x2;
+	double reactionRate,reactionRateTemp,lightDepth,I;
+	real x[ND_ND];
 	int i;
+#if !RP_NODE
+	printf("UDF is running \n");
+#endif
+
 	for (i = 0; i < interiorIDLength; i++)
 	{
 		thread = Lookup_Thread(domain, interiorIDs[i]);
 		begin_c_loop(c, thread)
 		{
 			double cVOF = C_VOF(c, thread);
-
 			/*Those are mole concentration=massFraction/molecularMass*1000 */
 			H = C_YI(c, thread, 0) / 1 * 1000;
-			hCO3 = C_YI(c, thread, 1) / 63 * 1000;
-			CO3m2 = C_YI(c, thread, 2) / 62 * 1000;
-			CO2 = C_YI(c, thread, 3) / 44 * 1000;
-			h20 = C_YI(c, thread, 4) / 18 * 1000;
+			OH = C_YI(c, thread, 1) / 17 * 1000;
+			hCO3 = C_YI(c, thread, 2) / 63 * 1000;
+			CO3m2 = C_YI(c, thread, 3) / 62 * 1000;
+			CO2 = C_YI(c, thread, 4) / 44 * 1000;
+			h20 = C_YI(c, thread, 5) / 18 * 1000;
 			totalCarbon = hCO3 + CO2 + CO3m2;
-
-			/*equilibrium mole fraction*/
+		/*get the PH at this time, It is assumed that PH does not change much during Dt. */		
 			if (H<1e-17)
-				PH=7; /* if it is at air phase and H is zero, assume the PH is 7*/
+				PH=7;  /*if it is at air phase and H is zero, assume the PH is 7*/
 			else
 				PH = -log10(H); /*convert mole concentration of proton to PH */
+			/* predict the proton consumption rate.*/
+			double Pefficiency=(-1.61+0.47*PH-0.03*PH*PH)/0.2308333333; /*from https://link.springer.com/article/10.1007/s10811-013-0177-2 */
+			if (Pefficiency<0.)
+				Pefficiency=0.0;
+			if (cVOF > 0.1)
+			{
+
+				C_CENTROID(x, c, thread);
+				lightDepth = phaseLevel - x[1];
+				if (lightDepth < 0)
+					lightDepth = 0.;
+
+				I = 1. / exp(250 *(lightDepth)) *1500;
+				reactionRateTemp = linearIntepolationLight(I);
+				fflush(stdout);
+				reactionRate = reactionRateTemp*3/1000000*Pefficiency/3600; /*mol/L/s or SI units kmol/m3/s*/
+			}
+			else
+			{
+				reactionRate=0.;
+			}
+
+			H=H-CURRENT_TIMESTEP*reactionRate; /*New [H] after proton consumption*/ 
+			if (H<0)
+				H=0.;
+
+			/*check */
+		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+			{
+				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, r is %E, PH is %f, Pefficiency is %f, and now [H] is %E, [OH] is %E",
+					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
+			}
+			fflush(stdout);
+
+		    /* solve for parabola equation*/
+ 			bb=H+OH;
+ 			cc=H*OH-1e-14;
+ 			delta=bb*bb-4*1*cc;
+ 			x1=(-bb+sqrt(delta))/2;
+ 			x2=(-bb-sqrt(delta))/2;
+ 			double testH=H+x1;
+			double testOH=OH+x1;
+			if (testH<0 || testOH<0)
+			{
+				H=H+x2;
+				OH=OH+x2;
+			}
+			else
+			{
+				H=H+x1;
+				OH=OH+x1;
+			}
+			/*check */
+		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+			{
+				printf("x1=%E,x2=%E,H*OH is %E, myid=%d  \n",x1,x2,H*OH,myid);
+				count++;
+			}
+			fflush(stdout);
+
+			/* update PH */
+			if (H<1e-17)
+				PH=7;  /*if it is at air phase and H is zero, assume the PH is 7*/
+			else
+				PH = -log10(H); /*convert mole concentration of proton to PH */
+
 			double carbonFraction[3];
 			linearIntepolationPH(PH, carbonFraction);
 			/*return an array[HCO3m,CO2,CO32m] */
@@ -277,15 +468,29 @@ DEFINE_ON_DEMAND(resetSpeciesFractionByPH)
 			h20 = (1000 - (hCO3 * 63 + CO3m2 * 62 + CO2 * 44 + H *1)) / 18.0;
 			if (cVOF > 1e-8)
 			{
-				C_YI(c, thread, 1)=hCO3/1000*63;
-				C_YI(c, thread, 2)=CO3m2/1000*62;
-				C_YI(c, thread, 3)=CO2/1000*44;
-				C_YI(c, thread, 4) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3);
+				C_YI(c, thread, 0)=H/1000*1;
+				C_YI(c, thread, 1)=H/1000*17;
+				C_YI(c, thread, 2)=hCO3/1000*63;
+				C_YI(c, thread, 3)=CO3m2/1000*62;
+				C_YI(c, thread, 4)=CO2/1000*44;
+				C_YI(c, thread, 5) = 1 - C_YI(c, thread, 0) - C_YI(c, thread, 1) - C_YI(c, thread, 2) - C_YI(c, thread, 3) - C_YI(c, thread, 4);
 			}
 		}
-
 		end_c_loop(c, thread);
 	}
+
+/*reset VOF for rotate zone*/
+
+	thread = Lookup_Thread(domain, 16);
+		begin_c_loop(c, thread)
+		{		
+			double cVOF = C_VOF(c, thread);
+			if (cVOF<0.001)
+				C_VOF(c, thread)=0.;
+		}
+		end_c_loop(c, thread);
+
+	fflush(stdout);
 }
 
 DEFINE_ON_DEMAND(resetCount)
@@ -328,9 +533,12 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 	Thread *tp = pt[0];	 /* primary */
 	Thread *ts = pt[1];	 /* secondary */
 	double cVOF = C_VOF(c, ts);
-	double H=C_YI(c, ts, 1) / 1 * 1000;
+	double H=C_YI(c, ts, 0) / 1 * 1000;
 	PH = -log10(H); /*convert mole concentration of proton to PH */
- 	double Pefficiency=linearIntepolationPefficiency(PH);
+ 	/* double Pefficiency=linearIntepolationPefficiency(PH); */
+	double Pefficiency=(-1.61+0.47*PH-0.03*PH*PH)/0.2308333333; /*from https://link.springer.com/article/10.1007/s10811-013-0177-2 */
+	if (Pefficiency<0.)
+		Pefficiency=0.0;
 
 	if (cVOF > 0.1)
 	{
@@ -340,10 +548,16 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 		if (lightDepth < 0)
 			lightDepth = 0.;
 
-		double I = 1. / exp(250 *(lightDepth)) *500;
-		double reactionRate = linearIntepolationLight(I)/80;
+		double I = 1. / exp(250 *(lightDepth)) *1500;
+		double reactionRate = linearIntepolationLight(I);
 		fflush(stdout);
-		*rr = reactionRate/200*Pefficiency;
+		*rr = reactionRate*3/1000000*Pefficiency/60; /*mol/L/s or SI units kmol/m3/s*/
+		if (count<10)
+		{
+			printf("my x is %f, lightDepth is %f, I is %f, rris %f, PH is %f, Pefficiency is %f  \n",x[1],lightDepth,I,*rr,PH,Pefficiency);
+			count++;
+		}
+		fflush(stdout);
 	}
 	else
 	{
