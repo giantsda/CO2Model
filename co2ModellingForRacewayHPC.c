@@ -180,13 +180,13 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 			if (H<0)
 				H=0.;
 
-			/*check */
-		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+			 /*check */
+		   /* if (count<200 && x[1]>0.15&&cVOF > 0.1)
 			{
 				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, r is %E, PH is %f, Pefficiency is %f, and now [H] is %E, [OH] is %E",
 					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
 			}
-			fflush(stdout);
+			fflush(stdout); */
 
 		    /* solve for parabola equation*/
  			bb=H+OH;
@@ -207,12 +207,14 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 				OH=OH+x1;
 			}
 			/*check */
-		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
+		   /* if (count<200 && x[1]>0.15&&cVOF > 0.1)
 			{
 				printf("x1=%E,x2=%E,H*OH is %E, myid=%d  \n",x1,x2,H*OH,myid);
 				count++;
 			}
 			fflush(stdout);
+*/
+
 
 			/* update PH */
 			if (H<1e-17)
@@ -418,13 +420,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 			if (H<0)
 				H=0.;
 
-			/*check */
-		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
-			{
-				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, r is %E, PH is %f, Pefficiency is %f, and now [H] is %E, [OH] is %E",
-					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
-			}
-			fflush(stdout);
+ 
 
 		    /* solve for parabola equation*/
  			bb=H+OH;
@@ -444,13 +440,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 				H=H+x1;
 				OH=OH+x1;
 			}
-			/*check */
-		    if (count<200 && x[1]>0.15&&cVOF > 0.1)
-			{
-				printf("x1=%E,x2=%E,H*OH is %E, myid=%d  \n",x1,x2,H*OH,myid);
-				count++;
-			}
-			fflush(stdout);
+ 
 
 			/* update PH */
 			if (H<1e-17)
@@ -552,12 +542,14 @@ DEFINE_HET_RXN_RATE(consumption, c, t, hr, mw, yi, rr, rr_t)
 		double reactionRate = linearIntepolationLight(I);
 		fflush(stdout);
 		*rr = reactionRate*3/1000000*Pefficiency/60; /*mol/L/s or SI units kmol/m3/s*/
+		/*
 		if (count<10)
 		{
 			printf("my x is %f, lightDepth is %f, I is %f, rris %f, PH is %f, Pefficiency is %f  \n",x[1],lightDepth,I,*rr,PH,Pefficiency);
 			count++;
 		}
 		fflush(stdout);
+		*/
 	}
 	else
 	{
