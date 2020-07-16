@@ -143,7 +143,7 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 			double cVOF = C_VOF(c, thread);
 
 			if (count<200 && x[1]>0.15&&cVOF > 0.1)
-				print=1;
+				print=0;
 			else
 				print=0;
 			/*Those are mole concentration=massFraction/molecularMass*1000 */
@@ -175,7 +175,7 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 				reactionRateTemp = linearIntepolationLight(I);
 				fflush(stdout);
 				reactionRate = reactionRateTemp*3/1000000*Pefficiency/3600; /*mol/L/s or SI units kmol/m3/s*/
-				C_T(c,thread)=reactionRate;
+				C_UDMI(c,thread,0)=C_UDMI(c,thread,0)+reactionRate;
 			}
 			else
 			{
