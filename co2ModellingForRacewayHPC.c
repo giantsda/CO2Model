@@ -130,7 +130,7 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 	double hCO3, h20, CO2, CO3m2, H,OH,totalCarbon,lastPH,lastOH,lastH,bb,cc,delta,x1,x2;
 	double reactionRate,reactionRateTemp,lightDepth,I;
 	real x[ND_ND];
-	int i;
+	int i,print;
 #if !RP_NODE
 	printf("UDF is running \n");
 #endif
@@ -141,6 +141,11 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 		begin_c_loop(c, thread)
 		{
 			double cVOF = C_VOF(c, thread);
+
+			if (count<200 && x[1]>0.15&&cVOF > 0.1)
+				print=1;
+			else
+				print=0;
 			/*Those are mole concentration=massFraction/molecularMass*1000 */
 			H = C_YI(c, thread, 0) / 1 * 1000;
 			OH = C_YI(c, thread, 1) / 17 * 1000;
@@ -170,10 +175,17 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 				reactionRateTemp = linearIntepolationLight(I);
 				fflush(stdout);
 				reactionRate = reactionRateTemp*3/1000000*Pefficiency/3600; /*mol/L/s or SI units kmol/m3/s*/
+				C_T(c,thread)=reactionRate;
 			}
 			else
 			{
 				reactionRate=0.;
+			}
+
+		    if (print)
+			{
+				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, reactionRate is %E, PH is %f, Pefficiency is %f, before consumption H is %E, OH is %E",
+					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
 			}
 
 			H=H-CURRENT_TIMESTEP*reactionRate; /*New [H] after proton consumption*/ 
@@ -181,12 +193,11 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 				H=0.;
 
 			 /*check */
-		   /* if (count<200 && x[1]>0.15&&cVOF > 0.1)
+		    if (print)
 			{
-				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, r is %E, PH is %f, Pefficiency is %f, and now [H] is %E, [OH] is %E",
-					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
+				printf("after consumption: [H] is %E, [OH] is %E-----",H,OH);
 			}
-			fflush(stdout); */
+			fflush(stdout); 
 
 		    /* solve for parabola equation*/
  			bb=H+OH;
@@ -207,13 +218,13 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 				OH=OH+x1;
 			}
 			/*check */
-		   /* if (count<200 && x[1]>0.15&&cVOF > 0.1)
+		    if (print)
 			{
-				printf("x1=%E,x2=%E,H*OH is %E, myid=%d  \n",x1,x2,H*OH,myid);
+				printf("after reequrilibrum:x1=%E,x2=%E,H is %E, myid=%d  \n",x1,x2,H,myid);
 				count++;
 			}
 			fflush(stdout);
-*/
+
 
 
 			/* update PH */
@@ -233,7 +244,7 @@ DEFINE_EXECUTE_AT_END(reEquilibriumandSpeciesFraction)
 			if (cVOF > 1e-8)
 			{
 				C_YI(c, thread, 0)=H/1000*1;
-				C_YI(c, thread, 1)=H/1000*17;
+				C_YI(c, thread, 1)=OH/1000*17;
 				C_YI(c, thread, 2)=hCO3/1000*63;
 				C_YI(c, thread, 3)=CO3m2/1000*62;
 				C_YI(c, thread, 4)=CO2/1000*44;
@@ -370,17 +381,22 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 	double hCO3, h20, CO2, CO3m2, H,OH,totalCarbon,lastPH,lastOH,lastH,bb,cc,delta,x1,x2;
 	double reactionRate,reactionRateTemp,lightDepth,I;
 	real x[ND_ND];
-	int i;
+	int i,print;
 #if !RP_NODE
 	printf("UDF is running \n");
 #endif
-
+	int ii=0;
 	for (i = 0; i < interiorIDLength; i++)
 	{
 		thread = Lookup_Thread(domain, interiorIDs[i]);
 		begin_c_loop(c, thread)
 		{
 			double cVOF = C_VOF(c, thread);
+
+			if (count<200 && x[1]>0.15&&cVOF > 0.1)
+				print=1;
+			else
+				print=0;
 			/*Those are mole concentration=massFraction/molecularMass*1000 */
 			H = C_YI(c, thread, 0) / 1 * 1000;
 			OH = C_YI(c, thread, 1) / 17 * 1000;
@@ -398,7 +414,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 			double Pefficiency=(-1.61+0.47*PH-0.03*PH*PH)/0.2308333333; /*from https://link.springer.com/article/10.1007/s10811-013-0177-2 */
 			if (Pefficiency<0.)
 				Pefficiency=0.0;
-			if (cVOF > 0.1)
+			if (cVOF > 0.01)
 			{
 
 				C_CENTROID(x, c, thread);
@@ -410,17 +426,29 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 				reactionRateTemp = linearIntepolationLight(I);
 				fflush(stdout);
 				reactionRate = reactionRateTemp*3/1000000*Pefficiency/3600; /*mol/L/s or SI units kmol/m3/s*/
+				// C_UDSI(c,thread,0)=C_UDSI(c,thread,0)+reactionRate;
 			}
 			else
 			{
 				reactionRate=0.;
 			}
 
+		    if (print)
+			{
+				printf("count: %d my x is %f,%f,%f, cVOF=%E, lightDepth is %f, I is %E, reactionRate is %E, PH is %f, Pefficiency is %f, before consumption H is %E, OH is %E",
+					count,x[0],x[1],x[2],cVOF,lightDepth,I,reactionRate,PH,Pefficiency,H,OH);
+			}
+
 			H=H-CURRENT_TIMESTEP*reactionRate; /*New [H] after proton consumption*/ 
 			if (H<0)
 				H=0.;
 
- 
+			 /*check */
+		    if (print)
+			{
+				printf("after consumption: [H] is %E, [OH] is %E-----",H,OH);
+			}
+			fflush(stdout); 
 
 		    /* solve for parabola equation*/
  			bb=H+OH;
@@ -440,7 +468,15 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 				H=H+x1;
 				OH=OH+x1;
 			}
- 
+			/*check */
+		    if (print)
+			{
+				printf("after reequrilibrum:x1=%E,x2=%E,H is %E, myid=%d  \n",x1,x2,H,myid);
+				count++;
+			}
+			fflush(stdout);
+
+
 
 			/* update PH */
 			if (H<1e-17)
@@ -459,7 +495,7 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 			if (cVOF > 1e-8)
 			{
 				C_YI(c, thread, 0)=H/1000*1;
-				C_YI(c, thread, 1)=H/1000*17;
+				C_YI(c, thread, 1)=OH/1000*17;
 				C_YI(c, thread, 2)=hCO3/1000*63;
 				C_YI(c, thread, 3)=CO3m2/1000*62;
 				C_YI(c, thread, 4)=CO2/1000*44;
@@ -481,14 +517,6 @@ DEFINE_ON_DEMAND(resetSpeciesFractionandReEquilibriumByPH)
 		end_c_loop(c, thread);
 
 	fflush(stdout);
-}
-
-DEFINE_ON_DEMAND(resetCount)
-{
-	count = 0;
-	printf("count is reset as %d \n", count);
-	fflush(stdout);
-
 }
 
  
